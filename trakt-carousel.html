@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trakt.tv Shows & Movies Calendar</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .carousel-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .carousel-track {
+            display: flex;
+            transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            height: 100%;
+        }
+
+        .carousel-item {
+            min-width: 33.333%;
+            height: 100vh;
+            position: relative;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            overflow: hidden;
+            transition: all 0.5s ease-in-out;
+        }
+
+        .carousel-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.8) 0%,
+				rgba(0, 0, 0, 0.5) 10%,
+				rgba(0, 0, 0, 0) 43%,
+				rgba(0, 0, 0, 0) 51%
+            );
+        }
+
+        .item-content {
+            position: relative;
+            z-index: 2;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            border-top: 2px solid rgba(255,255,255,0.1);
+        }
+
+        .item-summary {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            opacity: 0.9;
+            margin-bottom: 1rem;
+            max-height: 0; /* Hidden by default */
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+        }
+
+        .carousel-item:hover .item-summary {
+            max-height: 100vh; /* Show on hover */
+        }
+
+        .item-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }
+
+        .countdown {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .countdown-timer {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            border: 1px solid rgba(255, 107, 107, 0.3);
+        }
+
+        .publish-date {
+            font-size: 0.9rem;
+            color: #ccc;
+        }
+
+        .carousel-controls {
+            position: absolute;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 10;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .carousel-btn {
+            width: 50px;
+            height: 50px;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+        }
+
+        .carousel-btn:hover {
+            background: rgba(255,255,255,0.2);
+            transform: scale(1.1);
+        }
+
+        .carousel-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            padding: 2rem;
+            border-radius: 10px;
+            max-width: 400px;
+        }
+
+        @media (max-width: 768px) {
+            .carousel-item {
+                min-width: 100%;
+            }
+            
+            .item-content {
+                padding: 1.5rem;
+            }
+            
+            .item-title {
+                font-size: 1.2rem;
+            }
+            
+            .countdown {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .carousel-controls {
+                bottom: 1rem;
+                right: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Loading your shows and movies...</p>
+    </div>
+
+    <div class="carousel-container" id="carousel" style="display: none;">
+        <div class="carousel-track" id="carouselTrack">
+            <!-- Items will be populated here -->
+        </div>
+        
+        <div class="carousel-controls">
+            <button class="carousel-btn" id="prevBtn">←</button>
+            <button class="carousel-btn" id="nextBtn">→</button>
+        </div>
+    </div>
+
+    <div class="error" id="error" style="display: none;">
+        <h2>Failed to Load Feed</h2>
+        <p>Unable to fetch the RSS feed. This is likely due to the feed not being in a supported format.</p>
+    </div>
+
+    <script>
+        class TraktCarousel {
+            constructor() {
+                this.currentIndex = 0;
+                this.items = [];
+                this.itemsPerView = window.innerWidth <= 768 ? 1 : 3;
+                this.rssUrl = 'https://trakt.tv/calendars/my/shows-movies.atom?slurm=e5f7b34ce1eb9a221557057ec7c81970';
+                this.corsProxy = 'https://api.allorigins.win/get?url=';
+                
+                this.init();
+                this.setupEventListeners();
+				this.autoSlideTimer = null; // Add this line
+            }
+
+            async init() {
+                try {
+                    const response = await fetch(this.corsProxy + this.rssUrl);
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    
+                    const jsonData = await response.json();
+                    const feedData = jsonData.contents;
+                    
+                    await this.loadRSSFeedFromBase64(feedData);
+                    this.renderCarousel();
+                    this.startCountdowns();
+                    this.hideLoading();
+                    this.startAutoSlide();
+                } catch (error) {
+                    console.error('Error initializing carousel:', error);
+                    this.showError();
+                }
+            }
+
+            async loadRSSFeedFromBase64(base64Data) {
+                try {
+                    const base64String = base64Data.split(',')[1];
+                    const xmlText = atob(base64String);
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+                    
+                    const entries = xmlDoc.querySelectorAll('entry');
+                    
+                    const now = new Date();
+					now.setHours(0, 0, 0, 0);
+                    const rawItems = Array.from(entries).map(entry => {
+                        const title = entry.querySelector('title')?.textContent || 'No Title';
+                        const summary = entry.querySelector('summary')?.textContent || 'No description available';
+                        const published = entry.querySelector('published')?.textContent || '';
+                        
+                        const mediaContent = entry.getElementsByTagNameNS('http://search.yahoo.com/mrss/', 'content')[0];
+                        const posterUrl = mediaContent?.getAttribute('url') || '';
+                        const link = entry.querySelector('link[rel="alternate"]')?.getAttribute('href') || '#';
+
+                        return {
+                            title: this.decodeHtml(title),
+                            summary: this.decodeHtml(summary),
+                            published: new Date(published),
+                            posterUrl,
+                            link
+                        };
+                    });
+
+                    // Filter out entries that are less than today
+                    const filteredItems = rawItems.filter(item => {
+                        return item.published >= now;
+                    });
+
+                    // Sort the remaining items by published date ascending
+                    this.items = filteredItems.sort((a, b) => a.published.getTime() - b.published.getTime());
+
+                } catch (error) {
+                    console.error('Error parsing Base64 RSS feed:', error);
+                    throw error;
+                }
+            }
+
+            decodeHtml(html) {
+                const txt = document.createElement('textarea');
+                txt.innerHTML = html;
+                return txt.value;
+            }
+
+            renderCarousel() {
+                const track = document.getElementById('carouselTrack');
+                track.innerHTML = '';
+
+                this.items.forEach(item => {
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'carousel-item';
+                    itemElement.style.backgroundImage = `url(${item.posterUrl})`;
+                    
+                    itemElement.innerHTML = `
+                        <div class="item-content">
+                            <a href="${item.link}" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit;"><h2 class="item-title">${item.title}</h2></a>
+                            <p class="item-summary">${item.summary}</p>
+                            <div class="countdown">
+                                <div class="countdown-timer" data-target="${item.published.getTime()}">
+                                    Loading...
+                                </div>
+                                <div class="publish-date">
+                                    ${item.published.toLocaleDateString('en-US', {
+                                        weekday: 'short',
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    track.appendChild(itemElement);
+                });
+
+                this.updateCarousel();
+            }
+
+            updateCarousel() {
+                const track = document.getElementById('carouselTrack');
+                const offset = -(this.currentIndex * (100 / this.itemsPerView));
+                track.style.transform = `translateX(${offset}%)`;
+
+                // Update button states
+                const prevBtn = document.getElementById('prevBtn');
+                const nextBtn = document.getElementById('nextBtn');
+                const maxIndex = Math.max(0, this.items.length - this.itemsPerView);
+                
+            }
+
+            startCountdowns() {
+                const countdownElements = document.querySelectorAll('.countdown-timer');
+                
+                const updateCountdowns = () => {
+                    const now = Date.now();
+                    
+                    countdownElements.forEach(element => {
+                        const target = parseInt(element.dataset.target);
+                        const diff = target - now;
+                        
+                        if (diff > 0) {
+                            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                            
+                            if (days > 0) {
+                                element.textContent = `${days}d ${hours}h ${minutes}m`;
+                            } else if (hours > 0) {
+                                element.textContent = `${hours}h ${minutes}m`;
+                            } else {
+                                element.textContent = `${minutes}m`;
+                            }
+                        } else {
+                            element.textContent = 'Now Available!';
+                            element.style.background = 'rgba(76, 175, 80, 0.1)';
+                            element.style.borderColor = 'rgba(76, 175, 80, 0.3)';
+                            element.style.color = '#4caf50';
+                        }
+                    });
+                };
+                
+                updateCountdowns();
+                setInterval(updateCountdowns, 60000); // Update every minute
+            }
+
+            setupEventListeners() {
+                document.getElementById('prevBtn').addEventListener('click', () => {
+					const maxIndex = Math.max(0, this.items.length - this.itemsPerView);
+					if (this.currentIndex > 0) {
+						this.currentIndex--;
+					} else {
+						this.currentIndex = maxIndex; // Jump to end
+					}
+					this.updateCarousel();
+					this.resetAutoSlide();
+				});
+
+                document.getElementById('nextBtn').addEventListener('click', () => {
+					const maxIndex = Math.max(0, this.items.length - this.itemsPerView);
+					if (this.currentIndex < maxIndex) {
+						this.currentIndex++;
+					} else {
+						this.currentIndex = 0; // Jump to start
+					}
+					this.updateCarousel();
+					this.resetAutoSlide();
+				});
+
+                // Handle resize
+                window.addEventListener('resize', () => {
+                    const newItemsPerView = window.innerWidth <= 768 ? 1 : 3;
+                    if (newItemsPerView !== this.itemsPerView) {
+                        this.itemsPerView = newItemsPerView;
+                        this.currentIndex = 0;
+                        this.updateCarousel();
+                    }
+                });
+
+                // Keyboard navigation
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowLeft') {
+                        document.getElementById('prevBtn').click();
+                    } else if (e.key === 'ArrowRight') {
+                        document.getElementById('nextBtn').click();
+                    }
+                });
+            }
+
+            startAutoSlide() {
+                this.autoSlideTimer = setInterval(() => {
+                    const maxIndex = Math.max(0, this.items.length - this.itemsPerView);
+                    if (this.currentIndex < maxIndex) {
+                        this.currentIndex++;
+                    } else {
+                        this.currentIndex = 0;
+                    }
+                    this.updateCarousel();
+                }, 8000); // Auto-slide every 8 seconds
+            }
+			
+			resetAutoSlide() { // Add this entire method
+				clearInterval(this.autoSlideTimer);
+				this.startAutoSlide();
+			}
+
+            hideLoading() {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('carousel').style.display = 'block';
+            }
+
+            showError() {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+            }
+        }
+
+        // Initialize the carousel when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new TraktCarousel();
+        });
+    </script>
+</body>
+</html>
